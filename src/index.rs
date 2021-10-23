@@ -1,6 +1,8 @@
 #![allow(clippy::new_ret_no_self)]
 
-use pyo3::{exceptions, prelude::*, types::PyAny};
+use pyo3::exceptions;
+use pyo3::prelude::*;
+use pyo3::types::PyAny;
 
 use crate::{
     document::{extract_value, Document},
@@ -277,7 +279,7 @@ impl Index {
     #[staticmethod]
     fn exists(path: &str) -> PyResult<bool> {
         let directory = MmapDirectory::open(path).map_err(to_pyerr)?;
-        Ok(tv::Index::exists(&directory))
+        Ok(tv::Index::exists(&directory).unwrap())
     }
 
     /// The schema of the current index.
@@ -341,7 +343,6 @@ impl Index {
         let parser =
             tv::query::QueryParser::for_index(&self.index, default_fields);
         let query = parser.parse_query(query).map_err(to_pyerr)?;
-
         Ok(Query { inner: query })
     }
 }

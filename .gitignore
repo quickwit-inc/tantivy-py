@@ -9,3 +9,4 @@ __pycache__/
 tantivy.so
 tantivy/tantivy.cpython*.so
 tantivy.egg-info/
+.python-version

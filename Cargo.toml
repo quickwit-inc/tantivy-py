@@ -1,6 +1,6 @@
 [package]
 name = "tantivy"
-version = "0.13.2"
+version = "0.14.0"
 readme = "README.md"
 authors = ["Damir Jelić <poljar@termina.org.uk>"]
 edition = "2018"
@@ -12,12 +12,12 @@ crate-type = ["cdylib"]
 
 [dependencies]
 chrono = "0.4.19"
-tantivy = "0.13.2"
+tantivy = "0.14.0"
 itertools = "0.9.0"
 futures = "0.3.5"
 
 [dependencies.pyo3]
-version = "0.13.2"
+version = "0.14.1"
 features = ["extension-module"]
 
 [package.metadata.maturin]
