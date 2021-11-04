@@ -1,7 +1,9 @@
 #![allow(clippy::new_ret_no_self)]
 
 use crate::{document::Document, get_field, query::Query, to_pyerr};
+use pyo3::types::{PyDict, PyList, PyTuple};
 use pyo3::{exceptions::PyValueError, prelude::*, PyObjectProtocol};
+use std::collections::BTreeMap;
 use tantivy as tv;
 use tantivy::collector::{Count, MultiCollector, TopDocs};
 
@@ -41,6 +43,7 @@ impl ToPyObject for Fruit {
 /// Object holding a results successful search.
 pub(crate) struct SearchResult {
     hits: Vec<(Fruit, DocAddress)>,
+    facets_result: BTreeMap<String, Vec<(String, u64)>>,
     #[pyo3(get)]
     /// How many documents matched the query. Only available if `count` was set
     /// to true during the search.
@@ -52,11 +55,17 @@ impl PyObjectProtocol for SearchResult {
     fn __repr__(&self) -> PyResult<String> {
         if let Some(count) = self.count {
             Ok(format!(
-                "SearchResult(hits: {:?}, count: {})",
-                self.hits, count
+                "SearchResult(hits: {:?}, count: {}, facets: {})",
+                self.hits,
+                count,
+                self.facets_result.len()
             ))
         } else {
-            Ok(format!("SearchResult(hits: {:?})", self.hits))
+            Ok(format!(
+                "SearchResult(hits: {:?}, facets: {})",
+                self.hits,
+                self.facets_result.len()
+            ))
         }
     }
 }
@@ -74,6 +83,16 @@ impl SearchResult {
             .collect();
         Ok(ret)
     }
+
+    #[getter]
+    /// The list of facets that are requested on the search based on the
+    /// search results.
+    fn facets(
+        &self,
+        _py: Python,
+    ) -> PyResult<BTreeMap<String, Vec<(String, u64)>>> {
+        Ok(self.facets_result.clone())
+    }
 }
 
 #[pymethods]
@@ -90,6 +109,8 @@ impl Searcher {
     ///         should be ordered by. The field must be declared as a fast field
     ///         when building the schema. Note, this only works for unsigned
     ///         fields.
+    ///     facets (PyDict, optional): A dictionary of facet fields and keys to
+    ///         filter.
     ///     offset (Field, optional): The offset from which the results have
     ///         to be returned.
     ///
@@ -104,6 +125,7 @@ impl Searcher {
         limit: usize,
         count: bool,
         order_by_field: Option<&str>,
+        facets: Option<&PyDict>,
         offset: usize,
     ) -> PyResult<SearchResult> {
         let mut multicollector = MultiCollector::new();
@@ -113,6 +135,37 @@ impl Searcher {
         } else {
             None
         };
+
+        let mut facets_requests = BTreeMap::new();
+
+        // We create facets collector for each field and terms defined on the facets args
+        if let Some(facets_dict) = facets {
+            for key_value_any in facets_dict.items() {
+                if let Ok(key_value) = key_value_any.downcast::<PyTuple>() {
+                    if key_value.len() != 2 {
+                        continue;
+                    }
+                    let key: String = key_value.get_item(0).extract()?;
+                    let field = get_field(&self.inner.index().schema(), &key)?;
+
+                    let mut facet_collector =
+                        tv::collector::FacetCollector::for_field(field);
+
+                    if let Ok(value_list) =
+                        key_value.get_item(1).downcast::<PyList>()
+                    {
+                        for value_element in value_list {
+                            if let Ok(s) = value_element.extract::<String>() {
+                                facet_collector.add_facet(&s);
+                            }
+                        }
+                        let facet_handler =
+                            multicollector.add_collector(facet_collector);
+                        facets_requests.insert(key, facet_handler);
+                    }
+                }
+            }
+        }
 
         let (mut multifruit, hits) = {
             if let Some(order_by) = order_by_field {
@@ -162,7 +215,52 @@ impl Searcher {
             None => None,
         };
 
-        Ok(SearchResult { hits, count })
+        let mut facets_result: BTreeMap<String, Vec<(String, u64)>> =
+            BTreeMap::new();
+
+        // Go though all collectors that are registered
+        for (key, facet_collector) in facets_requests {
+            let facet_count = facet_collector.extract(&mut multifruit);
+            let mut facet_vec = Vec::new();
+            if let Some(facets_dict) = facets {
+                match facets_dict.get_item(key.clone()) {
+                    Some(facets_list_by_key) => {
+                        if let Ok(facets_list_by_key_native) =
+                            facets_list_by_key.downcast::<PyList>()
+                        {
+                            for facet_value in facets_list_by_key_native {
+                                if let Ok(s) = facet_value.extract::<String>() {
+                                    let facet_value_vec: Vec<(
+                                        &tv::schema::Facet,
+                                        u64,
+                                    )> = facet_count.get(&s).collect();
+
+                                    // Go for all elements on facet and count to add on vector
+                                    for (
+                                        facet_value_vec_element,
+                                        facet_count,
+                                    ) in facet_value_vec
+                                    {
+                                        facet_vec.push((
+                                            facet_value_vec_element.to_string(),
+                                            facet_count,
+                                        ))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    None => println!("Not found."),
+                }
+            }
+            facets_result.insert(key.clone(), facet_vec);
+        }
+
+        Ok(SearchResult {
+            hits,
+            count,
+            facets_result,
+        })
     }
 
     /// Returns the overall number of documents in the index.
