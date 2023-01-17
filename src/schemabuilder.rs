@@ -2,7 +2,7 @@
 
 use pyo3::{exceptions, prelude::*};
 
-use tantivy::schema;
+use tantivy::schema::{self, FacetOptions};
 
 use crate::schema::Schema;
 use std::sync::{Arc, RwLock};
@@ -123,6 +123,50 @@ impl SchemaBuilder {
 
         if let Some(builder) = builder.write().unwrap().as_mut() {
             builder.add_i64_field(name, opts);
+        } else {
+            return Err(exceptions::PyValueError::new_err(
+                "Schema builder object isn't valid anymore.",
+            ));
+        }
+        Ok(self.clone())
+    }
+
+    /// Add a new float64 field to the schema.
+    /// Note: When adding value to the index, make sure that it is type-casted to float
+    /// Adding integers or other values may produce false result
+    ///
+    /// Args:
+    ///     name (str): The name of the field.
+    ///     stored (bool, optional): If true sets the field as stored, the
+    ///         content of the field can be later restored from a Searcher.
+    ///         Defaults to False.
+    ///     indexed (bool, optional): If true sets the field to be indexed.
+    ///     fast (str, optional): Set the f64 options as a single-valued fast
+    ///         field. Fast fields are designed for random access. Access time
+    ///         are similar to a random lookup in an array. If more than one
+    ///         value is associated to a fast field, only the last one is kept.
+    ///         Can be one of 'single' or 'multi'. If this is set to 'single,
+    ///         the document must have exactly one value associated to the
+    ///         document. If this is set to 'multi', the document can have any
+    ///         number of values associated to the document. Defaults to None,
+    ///         which disables this option.
+    ///
+    /// Returns the associated field handle.
+    /// Raises a ValueError if there was an error with the field creation.
+    #[args(stored = false, indexed = false)]
+    fn add_float_field(
+        &mut self,
+        name: &str,
+        stored: bool,
+        indexed: bool,
+        fast: Option<&str>,
+    ) -> PyResult<Self> {
+        let builder = &mut self.builder;
+
+        let opts = SchemaBuilder::build_float_option(stored, indexed, fast)?;
+
+        if let Some(builder) = builder.write().unwrap().as_mut() {
+            builder.add_f64_field(name, opts);
         } else {
             return Err(exceptions::PyValueError::new_err(
                 "Schema builder object isn't valid anymore.",
@@ -267,11 +311,12 @@ impl SchemaBuilder {
     /// Add a Facet field to the schema.
     /// Args:
     ///     name (str): The name of the field.
+    #[args(stored = false, indexed = false)]
     fn add_facet_field(&mut self, name: &str) -> PyResult<Self> {
         let builder = &mut self.builder;
 
         if let Some(builder) = builder.write().unwrap().as_mut() {
-            builder.add_facet_field(name, INDEXED);
+            builder.add_facet_field(name, FacetOptions::default());
         } else {
             return Err(exceptions::PyValueError::new_err(
                 "Schema builder object isn't valid anymore.",
@@ -320,6 +365,39 @@ impl SchemaBuilder {
 
 impl SchemaBuilder {
     fn build_int_option(
+        stored: bool,
+        indexed: bool,
+        fast: Option<&str>,
+    ) -> PyResult<schema::NumericOptions> {
+        let opts = schema::NumericOptions::default();
+
+        let opts = if stored { opts.set_stored() } else { opts };
+        let opts = if indexed { opts.set_indexed() } else { opts };
+
+        let fast = match fast {
+            Some(f) => {
+                let f = f.to_lowercase();
+                match f.as_ref() {
+                    "single" => Some(schema::Cardinality::SingleValue),
+                    "multi" => Some(schema::Cardinality::MultiValues),
+                    _ => return Err(exceptions::PyValueError::new_err(
+                        "Invalid index option, valid choices are: 'multivalue' and 'singlevalue'"
+                    )),
+                }
+            }
+            None => None,
+        };
+
+        let opts = if let Some(f) = fast {
+            opts.set_fast(f)
+        } else {
+            opts
+        };
+
+        Ok(opts)
+    }
+
+    fn build_float_option(
         stored: bool,
         indexed: bool,
         fast: Option<&str>,

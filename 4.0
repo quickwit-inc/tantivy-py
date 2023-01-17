@@ -1,0 +1,26 @@
+Collecting pytest
+  Downloading pytest-7.1.2-py3-none-any.whl (297 kB)
+Requirement already satisfied: colorama in c:\users\alphaceph\anaconda3\envs\py310\lib\site-packages (from pytest) (0.4.4)
+Collecting attrs>=19.2.0
+  Downloading attrs-21.4.0-py2.py3-none-any.whl (60 kB)
+Collecting py>=1.8.2
+  Downloading py-1.11.0-py2.py3-none-any.whl (98 kB)
+Collecting atomicwrites>=1.0
+  Downloading atomicwrites-1.4.1.tar.gz (14 kB)
+Collecting pluggy<2.0,>=0.12
+  Downloading pluggy-1.0.0-py2.py3-none-any.whl (13 kB)
+Collecting packaging
+  Downloading packaging-21.3-py3-none-any.whl (40 kB)
+Collecting iniconfig
+  Downloading iniconfig-1.1.1-py2.py3-none-any.whl (5.0 kB)
+Requirement already satisfied: tomli>=1.0.0 in c:\users\alphaceph\anaconda3\envs\py310\lib\site-packages (from pytest) (2.0.1)
+Collecting pyparsing!=3.0.5,>=2.0.2
+  Downloading pyparsing-3.0.9-py3-none-any.whl (98 kB)
+Building wheels for collected packages: atomicwrites
+  Building wheel for atomicwrites (setup.py): started
+  Building wheel for atomicwrites (setup.py): finished with status 'done'
+  Created wheel for atomicwrites: filename=atomicwrites-1.4.1-py2.py3-none-any.whl size=6957 sha256=a1a268c4dc96c217af8ea7655cc187e388dcca401b511a0a00e532af25c25aee
+  Stored in directory: c:\users\alphaceph\appdata\local\pip\cache\wheels\34\07\0b\33b15f68736109f72ea0bb2499521d87312b932620737447a2
+Successfully built atomicwrites
+Installing collected packages: pyparsing, py, pluggy, packaging, iniconfig, attrs, atomicwrites, pytest
+Successfully installed atomicwrites-1.4.1 attrs-21.4.0 iniconfig-1.1.1 packaging-21.3 pluggy-1.0.0 py-1.11.0 pyparsing-3.0.9 pytest-7.1.2

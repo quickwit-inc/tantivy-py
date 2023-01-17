@@ -1,9 +1,13 @@
 #![allow(clippy::new_ret_no_self)]
 
+use std::collections::HashMap;
 use crate::{document::Document, get_field, query::Query, to_pyerr};
 use pyo3::{exceptions::PyValueError, prelude::*};
 use tantivy as tv;
 use tantivy::collector::{Count, MultiCollector, TopDocs};
+use tv::collector::{FacetCollector};
+use tv::fastfield::FastFieldReader;
+use tv::{SegmentReader, Score, DocId};
 
 /// Tantivy's Searcher class
 ///
@@ -41,10 +45,15 @@ impl ToPyObject for Fruit {
 /// Object holding a results successful search.
 pub(crate) struct SearchResult {
     hits: Vec<(Fruit, DocAddress)>,
+    
     #[pyo3(get)]
     /// How many documents matched the query. Only available if `count` was set
     /// to true during the search.
     count: Option<usize>,
+
+    #[pyo3(get)]
+    /// Results of facets using using `count_facets_by_field` parameter
+    facet_counts: Option<HashMap<String, u64>>,
 }
 
 #[pymethods]
@@ -83,10 +92,15 @@ impl Searcher {
     ///         return. Defaults to 10.
     ///     count (bool, optional): Should the number of documents that match
     ///         the query be returned as well. Defaults to true.
+    ///     count_facets_by_field (Field, optional): Return grouped number of
+    ///         documents by the given facet field. Defaults to false
     ///     order_by_field (Field, optional): A schema field that the results
     ///         should be ordered by. The field must be declared as a fast field
     ///         when building the schema. Note, this only works for unsigned
     ///         fields.
+    ///     weight_by_field (Field, optional): A schema field increases the
+    ///         score of the document by the given value. It should be a fast
+    ///         field of float data type
     ///     offset (Field, optional): The offset from which the results have
     ///         to be returned.
     ///
@@ -100,7 +114,9 @@ impl Searcher {
         query: &Query,
         limit: usize,
         count: bool,
+        count_facets_by_field: Option<&str>,
         order_by_field: Option<&str>,
+        weight_by_field: Option<&str>,
         offset: usize,
     ) -> PyResult<SearchResult> {
         let mut multicollector = MultiCollector::new();
@@ -111,8 +127,50 @@ impl Searcher {
             None
         };
 
+        let facet_handle = if let Some(facet_name) = count_facets_by_field {
+            let field = get_field(&self.inner.index().schema(), facet_name)?;
+            let mut facet_collector = FacetCollector::for_field(field);
+            facet_collector.add_facet("/");
+            Some(multicollector.add_collector(facet_collector))
+        } else {
+            None
+        };
+
         let (mut multifruit, hits) = {
-            if let Some(order_by) = order_by_field {
+
+            if let Some(weight_by) = weight_by_field {
+
+                let field = get_field(&self.inner.index().schema(), weight_by)?;
+                let collector = TopDocs::with_limit(limit)
+                    .and_offset(offset)
+                    .tweak_score(move |segment_reader: &SegmentReader| {
+                        let weight_reader = segment_reader.fast_fields().f64(field).unwrap();
+                        return move |doc: DocId, original_score: Score| {
+                            let weight: f64 = weight_reader.get(doc);
+                            let new_score = original_score + weight as f32;
+                            return new_score
+                        }
+                    });
+
+                let top_docs_handle = multicollector.add_collector(collector);
+                let ret = self.inner.search(query.get(), &multicollector);
+
+                match ret {
+                    Ok(mut r) => {
+                        let top_docs = top_docs_handle.extract(&mut r);
+                        let result: Vec<(Fruit, DocAddress)> = top_docs
+                            .iter()
+                            .map(|(f, d)| {
+                                (Fruit::Score(*f), DocAddress::from(d))
+                            })
+                            .collect();
+                        (r, result)
+                    }
+                    Err(e) => return Err(PyValueError::new_err(e.to_string())),
+                }
+
+            } else if let Some(order_by) = order_by_field {
+
                 let field = get_field(&self.inner.index().schema(), order_by)?;
                 let collector = TopDocs::with_limit(limit)
                     .and_offset(offset)
@@ -159,7 +217,26 @@ impl Searcher {
             None => None,
         };
 
-        Ok(SearchResult { hits, count })
+        let facet_counts:Option<HashMap<String, u64>> = match facet_handle {
+            Some(h) => {
+                let facet_counts_obj = h.extract(&mut multifruit);
+
+                let collection: Vec<(&tv::schema::Facet, u64)> = facet_counts_obj
+                    .get("/")
+                    .collect();
+
+                let mut facet_counts:HashMap<String, u64> = HashMap::new();
+
+                for (facet, count) in collection.iter() {
+                    facet_counts.insert(facet.to_path_string(), *count);
+                }
+
+                Some(facet_counts)
+            },
+            None => None,
+        };
+
+        Ok(SearchResult { hits, count, facet_counts})
     }
 
     /// Returns the overall number of documents in the index.

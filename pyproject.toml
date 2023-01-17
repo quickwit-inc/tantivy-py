@@ -1,7 +1,8 @@
 [build-system]
-requires = ["maturin"]
+requires = ["maturin>=0.13,<0.14"]
 build-backend = "maturin"
 
 [project]
 name = "tantivy"
 requires-python = ">=3.7"
+

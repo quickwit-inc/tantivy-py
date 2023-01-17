@@ -48,7 +48,7 @@ impl Facet {
     #[classmethod]
     fn from_string(_cls: &PyType, facet_string: &str) -> Facet {
         Facet {
-            inner: schema::Facet::from(facet_string),
+            inner: schema::Facet::from_text(facet_string).unwrap(),
         }
     }
 
