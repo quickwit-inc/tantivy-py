@@ -38,6 +38,10 @@ Running the tests is done using:
 
     make test
 
+Building python wheel
+    pip install maturin
+    maturin build
+
 # Usage
 
 The Python bindings have a similar API to Tantivy. To create a index first a schema
