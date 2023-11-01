@@ -1,6 +1,6 @@
 [package]
 name = "tantivy"
-version = "0.20.1"
+version = "0.20.2"
 readme = "README.md"
 authors = ["Damir Jelić <poljar@termina.org.uk>"]
 edition = "2018"

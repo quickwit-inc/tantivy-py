@@ -4,6 +4,7 @@ use pyo3::{exceptions, prelude::*, wrap_pymodule};
 mod document;
 mod facet;
 mod index;
+mod geocoding;
 mod parser_error;
 mod query;
 mod schema;
@@ -86,6 +87,7 @@ fn tantivy(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<SnippetGenerator>()?;
 
     m.add_wrapped(wrap_pymodule!(query_parser_error))?;
+    m.add_wrapped(wrap_pymodule!(geocoding_tools))?;
 
     Ok(())
 }
@@ -152,4 +154,10 @@ pub(crate) fn get_field(
     })?;
 
     Ok(field)
+}
+
+#[pymodule]
+fn geocoding_tools(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<geocoding::Geocoding>()?;
+    Ok(())
 }
