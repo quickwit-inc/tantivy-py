@@ -15,10 +15,8 @@ use tantivy as tv;
 struct OccurQueryPair(Occur, Query);
 
 impl<'source> FromPyObject<'source> for OccurQueryPair {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        let tuple = ob.downcast::<PyTuple>()?;
-        let occur = tuple.get_item(0)?.extract()?;
-        let query = tuple.get_item(1)?.extract()?;
+    fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
+        let (occur, query): (Occur, Query) = ob.extract()?;
 
         Ok(OccurQueryPair(occur, query))
     }
